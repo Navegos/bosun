@@ -1338,6 +1338,11 @@ async fn create_session(
         path: spec.path.clone(),
         command,
         metadata,
+        env: config
+            .session_env
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect(),
     };
     match client.create_session(&create).await {
         Ok(_) => Ok(internal),

@@ -43,6 +43,7 @@ async fn kill_session_removes_from_list() {
             path: "/tmp".into(),
             command: String::new(),
             metadata: None,
+            env: Vec::new(),
         })
         .await
         .expect("create ok");
@@ -75,6 +76,7 @@ async fn kill_session_missing_is_noop() {
             path: "/tmp".into(),
             command: String::new(),
             metadata: None,
+            env: Vec::new(),
         })
         .await
         .expect("seed ok");
@@ -100,6 +102,7 @@ async fn set_display_name_updates_option_and_list() {
             path: "/tmp".into(),
             command: String::new(),
             metadata: None,
+            env: Vec::new(),
         })
         .await
         .expect("create ok");
@@ -160,6 +163,7 @@ async fn metadata_round_trips_through_tmux_options() {
             path: "/tmp".into(),
             command: String::new(),
             metadata: Some(meta.clone()),
+            env: Vec::new(),
         })
         .await
         .expect("create with metadata ok");
@@ -196,6 +200,7 @@ async fn metadata_returns_none_when_agent_option_missing() {
             path: "/tmp".into(),
             command: String::new(),
             metadata: None,
+            env: Vec::new(),
         })
         .await
         .expect("bare create ok");

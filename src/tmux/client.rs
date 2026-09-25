@@ -35,6 +35,11 @@ pub struct CreateSpec {
     /// recover the original spec. `None` skips persistence (useful
     /// for tests and for callers that don't care about restart).
     pub metadata: Option<SessionMetadata>,
+    /// Extra environment for the session's shell, from the `[env]`
+    /// table in `config.toml`. Each pair becomes a `-e KEY=VALUE` on
+    /// `new-session`. `BOSUN=1` is always added on top, so callers
+    /// don't pass it here.
+    pub env: Vec<(String, String)>,
 }
 
 /// The subset of `SessionSpec` that bosun persists as tmux user
@@ -335,15 +340,26 @@ impl TmuxClient for TokioTmuxClient {
         // shell init entirely, and agents like Claude rely on that
         // init for things like PATH and (historically) env vars.
         //
-        // We deliberately do NOT pass `-e KEY=VALUE` env passthrough
-        // here — it inflates the command to dozens of args and didn't
-        // resolve the Claude auth issue in testing. Claude reads its
-        // credentials from a file or the macOS Keychain, not from env.
+        // We deliberately do NOT pass bosun's own environment through
+        // with `-e` — it inflates the command to dozens of args and
+        // didn't resolve the Claude auth issue in testing. Claude reads
+        // its credentials from a file or the macOS Keychain, not from
+        // env. What we do set is the user's `[env]` table plus the
+        // `BOSUN=1` marker, so a shell or wrapper can tell it's running
+        // inside bosun without parsing `$TMUX` for a socket name that
+        // varies per install (issue #17). The marker goes last so an
+        // `[env]` entry can't override it. `new-session -e` needs
+        // tmux 3.2+. Restart-in-place reuses this shell, so the
+        // variables carry over without being set again.
         let mut cmd = self.cmd();
         cmd.arg("new-session").arg("-d").arg("-s").arg(&spec.name);
         if !spec.path.is_empty() {
             cmd.arg("-c").arg(&spec.path);
         }
+        for (key, value) in &spec.env {
+            cmd.arg("-e").arg(format!("{key}={value}"));
+        }
+        cmd.arg("-e").arg("BOSUN=1");
         let output = cmd.output().await.map_err(|e| match e.kind() {
             std::io::ErrorKind::NotFound => BosunError::TmuxNotInstalled,
             _ => BosunError::Io(e),

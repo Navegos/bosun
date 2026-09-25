@@ -95,6 +95,45 @@ pub const DEFAULT_REMOVE_DEAD_SESSIONS: bool = false;
 /// `config.toml` with `default_agent`.
 pub const DEFAULT_AGENT: &str = "claude";
 
+/// Turn the raw `[env]` table into the variables passed to every new
+/// session. Names must be shell-valid (`[A-Za-z_][A-Za-z0-9_]*`) since
+/// tmux splits `-e KEY=VALUE` at the first `=`. Strings pass through
+/// as-is; numbers and booleans are stringified. `BOSUN` is reserved for
+/// the marker bosun sets itself. Anything else is dropped with a warning
+/// rather than failing the whole config.
+fn session_env(
+    raw: std::collections::BTreeMap<String, toml::Value>,
+) -> std::collections::BTreeMap<String, String> {
+    let mut env = std::collections::BTreeMap::new();
+    for (key, value) in raw {
+        let valid_name = key
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+            && key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+        if !valid_name {
+            tracing::warn!(key = %key, "ignoring [env] entry with an invalid variable name");
+            continue;
+        }
+        if key == "BOSUN" {
+            tracing::warn!("ignoring [env] BOSUN; bosun always sets BOSUN=1 itself");
+            continue;
+        }
+        let value = match value {
+            toml::Value::String(s) => s,
+            toml::Value::Integer(i) => i.to_string(),
+            toml::Value::Float(f) => f.to_string(),
+            toml::Value::Boolean(b) => b.to_string(),
+            _ => {
+                tracing::warn!(key = %key, "ignoring [env] entry that is not a string, number or boolean");
+                continue;
+            }
+        };
+        env.insert(key, value);
+    }
+    env
+}
+
 fn default_agent(value: Option<String>) -> String {
     let Some(value) = value else {
         return DEFAULT_AGENT.to_string();
@@ -242,6 +281,12 @@ pub struct Config {
     /// before exec'ing the real binary. Missing entries fall back to
     /// the agent's own name resolved on the login-shell PATH.
     pub agent_binaries: std::collections::HashMap<String, String>,
+    /// Extra environment variables for every new session's shell, from
+    /// the `[env]` table in `config.toml`. Passed as `-e KEY=VALUE` on
+    /// `new-session`, alongside the `BOSUN=1` marker bosun always sets.
+    /// File-only, like `[agents]`. Entries with an invalid name, a
+    /// `BOSUN` key, or a non-scalar value are dropped with a warning.
+    pub session_env: std::collections::BTreeMap<String, String>,
 }
 
 impl Default for Config {
@@ -271,6 +316,7 @@ impl Default for Config {
             remove_dead_sessions: DEFAULT_REMOVE_DEAD_SESSIONS,
             keybindings: crate::keybindings::KeyBindings::default(),
             agent_binaries: std::collections::HashMap::new(),
+            session_env: std::collections::BTreeMap::new(),
         }
     }
 }
@@ -369,6 +415,16 @@ struct ConfigFile {
     /// ```
     #[serde(default, skip_serializing_if = "Option::is_none")]
     agents: Option<std::collections::HashMap<String, String>>,
+    /// Extra session environment. See `Config::session_env`.
+    /// Persisted as the `[env]` table:
+    /// ```toml
+    /// [env]
+    /// OPENCODE_CLI_CONFIG_CONTENT = '{"tabs":{"mode":"off"}}'
+    /// ```
+    /// Values are kept as raw TOML so a number or boolean written
+    /// without quotes still loads instead of failing the whole file.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    env: Option<std::collections::BTreeMap<String, toml::Value>>,
 }
 
 impl Config {
@@ -526,6 +582,7 @@ impl Config {
                 crate::keybindings::KeyBindings::default()
             });
         let agent_binaries = file.agents.unwrap_or_default();
+        let session_env = session_env(file.env.unwrap_or_default());
 
         Self {
             session_prefix,
@@ -548,6 +605,7 @@ impl Config {
             remove_dead_sessions,
             keybindings,
             agent_binaries,
+            session_env,
         }
     }
 
@@ -976,6 +1034,7 @@ mod tests {
             remove_dead_sessions: DEFAULT_REMOVE_DEAD_SESSIONS,
             keybindings: crate::keybindings::KeyBindings::default(),
             agent_binaries: std::collections::HashMap::new(),
+            session_env: std::collections::BTreeMap::new(),
         }
     }
 
@@ -1025,6 +1084,7 @@ mod tests {
             remove_dead_sessions: DEFAULT_REMOVE_DEAD_SESSIONS,
             keybindings: crate::keybindings::KeyBindings::default(),
             agent_binaries: std::collections::HashMap::new(),
+            session_env: std::collections::BTreeMap::new(),
         };
         assert!(!c.manages("bosun-mine-abc"));
         assert!(c.manages("bosun-other-xyz"));
@@ -1082,6 +1142,50 @@ mod tests {
     #[test]
     fn show_group_in_title_defaults_off() {
         assert!(!Config::default().show_group_in_title);
+    }
+
+    #[test]
+    fn env_table_parses_and_normalizes() {
+        let src = r#"
+            [env]
+            OPENCODE_CLI_CONFIG_CONTENT = '{"tabs":{"mode":"off"}}'
+            RETRIES = 3
+            VERBOSE = true
+            _PRIVATE = "x"
+        "#;
+        let parsed: ConfigFile = toml::from_str(src).unwrap();
+        let env = session_env(parsed.env.unwrap());
+        assert_eq!(
+            env.get("OPENCODE_CLI_CONFIG_CONTENT").map(String::as_str),
+            Some(r#"{"tabs":{"mode":"off"}}"#)
+        );
+        assert_eq!(env.get("RETRIES").map(String::as_str), Some("3"));
+        assert_eq!(env.get("VERBOSE").map(String::as_str), Some("true"));
+        assert_eq!(env.get("_PRIVATE").map(String::as_str), Some("x"));
+    }
+
+    #[test]
+    fn env_table_drops_invalid_entries() {
+        let src = r#"
+            [env]
+            BOSUN = "0"
+            "1BAD" = "x"
+            "HAS=EQ" = "x"
+            "has space" = "x"
+            LIST = ["a", "b"]
+            GOOD = "ok"
+        "#;
+        let parsed: ConfigFile = toml::from_str(src).unwrap();
+        let env = session_env(parsed.env.unwrap());
+        assert_eq!(env.len(), 1);
+        assert_eq!(env.get("GOOD").map(String::as_str), Some("ok"));
+    }
+
+    #[test]
+    fn env_table_absent_is_empty() {
+        let parsed: ConfigFile = toml::from_str("").unwrap();
+        assert!(parsed.env.is_none());
+        assert!(Config::default().session_env.is_empty());
     }
 
     #[test]

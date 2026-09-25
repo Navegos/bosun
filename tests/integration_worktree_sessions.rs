@@ -141,6 +141,7 @@ async fn worktree_add_and_options_round_trip_through_list_sessions() {
             path: wt_str.into(),
             command: String::new(),
             metadata: Some(meta),
+            env: Vec::new(),
         })
         .await
         .expect("create_session ok");

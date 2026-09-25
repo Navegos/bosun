@@ -41,6 +41,7 @@ async fn create_session_sets_display_name_and_appears_in_list() {
         path: "/tmp".to_string(),
         command: String::new(), // default shell
         metadata: None,
+        env: Vec::new(),
     };
 
     let created = client.create_session(&spec).await.expect("create ok");
@@ -83,6 +84,7 @@ async fn create_session_without_display_name_does_not_set_option() {
         path: "/tmp".to_string(),
         command: String::new(),
         metadata: None,
+        env: Vec::new(),
     };
     client.create_session(&spec).await.expect("create ok");
 
@@ -127,6 +129,7 @@ async fn tilde_path_is_expanded_before_reaching_tmux() {
         path,
         command: String::new(),
         metadata: None,
+        env: Vec::new(),
     };
 
     // What bosun sends today: expanded.
@@ -171,4 +174,67 @@ async fn tilde_path_is_expanded_before_reaching_tmux() {
 
     kill_server(&sock);
     let _ = std::fs::remove_dir(&target);
+}
+
+/// Every session carries `BOSUN=1` so a shell or wrapper can tell it's
+/// inside bosun without parsing `$TMUX` (issue #17), plus whatever the
+/// `[env]` table supplies. The marker goes last, so an `[env]` entry
+/// can't override it.
+#[tokio::test(flavor = "current_thread")]
+async fn create_session_sets_bosun_marker_and_extra_env() {
+    let sock = unique_socket("env");
+    let client = TokioTmuxClient::with_socket(sock.clone());
+
+    let spec = CreateSpec {
+        name: "bosun-env-cafef00d".to_string(),
+        display_name: None,
+        path: "/tmp".to_string(),
+        command: String::new(),
+        metadata: None,
+        env: vec![
+            (
+                "OPENCODE_CLI_CONFIG_CONTENT".to_string(),
+                r#"{"tabs":{"mode":"off"}}"#.to_string(),
+            ),
+            ("BOSUN".to_string(), "0".to_string()),
+        ],
+    };
+    client.create_session(&spec).await.expect("create ok");
+
+    let show = |var: &str| {
+        let out = tmux(
+            &sock,
+            &["show-environment", "-t", "bosun-env-cafef00d", var],
+        );
+        String::from_utf8_lossy(&out.stdout).trim().to_string()
+    };
+    assert_eq!(show("BOSUN"), "BOSUN=1");
+    assert_eq!(
+        show("OPENCODE_CLI_CONFIG_CONTENT"),
+        r#"OPENCODE_CLI_CONFIG_CONTENT={"tabs":{"mode":"off"}}"#
+    );
+
+    // And the shell itself sees it, not just tmux's session environment.
+    let _ = tmux(
+        &sock,
+        &[
+            "send-keys",
+            "-t",
+            "bosun-env-cafef00d",
+            "echo marker=$BOSUN",
+            "Enter",
+        ],
+    );
+    let mut seen = false;
+    for _ in 0..50 {
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        let cap = tmux(&sock, &["capture-pane", "-p", "-t", "bosun-env-cafef00d"]);
+        if String::from_utf8_lossy(&cap.stdout).contains("marker=1") {
+            seen = true;
+            break;
+        }
+    }
+    assert!(seen, "shell should see BOSUN=1");
+
+    kill_server(&sock);
 }

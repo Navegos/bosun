@@ -145,7 +145,7 @@ you can click into and drive without leaving bosun.
 
 ## Requirements
 
-- tmux 3.x (tested against 3.6) — bosun drives tmux but does not
+- tmux 3.2 or newer (tested against 3.6 and 3.7) — bosun drives tmux but does not
   bundle it, and errors out at startup if it can't find it
 - Rust 1.80 or newer (only needed when building from source or
   installing via cargo)
@@ -361,7 +361,7 @@ no save step — each change applies immediately and is written to
 `config.toml`, so the panel and the file always agree.
 
 Install-level settings (`session_prefix`, `tmux_socket`, the `[agents]`
-binary overrides) stay file-only: they are set once, and a wrong value
+binary overrides, the `[env]` table) stay file-only: they are set once, and a wrong value
 is better caught by editing the file than by cycling a row.
 
 A row whose setting comes from an [environment variable](#configuration)
@@ -559,7 +559,24 @@ remove_dead_sessions = false    # true drops a session's sidebar row when its tm
 [agents]
 opencode = "/Users/me/bin/opencode-wrapper"
 codex    = "codex-nightly"
+
+# Optional extra environment for every new session's shell, passed to
+# tmux as `-e KEY=VALUE`. Strings, numbers and booleans are accepted.
+[env]
+OPENCODE_CLI_CONFIG_CONTENT = '{"tabs":{"mode":"off"}}'
 ```
+
+### Detecting a bosun session
+
+Every session bosun creates has `BOSUN=1` in its environment, so a shell rc file or a wrapper script can tell it is running inside bosun. Check that instead of looking for `bosun` in `$TMUX`: the socket name comes from `tmux_socket` and differs between installs (`default` puts bosun on your shared server).
+
+```bash
+if [ -n "$BOSUN" ]; then
+  export OPENCODE_CLI_CONFIG_CONTENT='{"tabs":{"mode":"off"}}'
+fi
+```
+
+For a fixed value you don't need the check at all: put it in the `[env]` table and bosun sets it for you. `BOSUN` itself is reserved and can't be overridden there. The variables are set when a session is created, so existing sessions pick them up only after they are killed and started again (restart reuses the same shell).
 
 Sections, per-section font overrides, sidebar membership, session
 history, and recent-sessions metadata are also persisted under

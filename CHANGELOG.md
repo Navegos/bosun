@@ -8,11 +8,14 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Sessions carry a `BOSUN=1` marker.** Every session bosun creates has `BOSUN=1` in its environment, so a shell rc file or wrapper script can tell it's inside bosun without parsing `$TMUX` for a socket name that varies per install ([#17](https://github.com/yetidevworks/bosun/issues/17)).
+- **Set extra environment for every session with `[env]`.** Entries in a new `[env]` table in `config.toml` are passed to each new session's shell, e.g. `OPENCODE_CLI_CONFIG_CONTENT = '{"tabs":{"mode":"off"}}'` to turn off OpenCode's tabs inside bosun. Invalid names and non-scalar values are skipped with a warning instead of failing the config.
 - **Send the next key directly to an application with Ctrl+V.** Ctrl+V followed by Shift+Right reaches Codex's question navigation without changing Bosun tabs. Press Ctrl+V twice to send Ctrl+V itself. Works in embedded sessions and full-screen tmux attachments, with a waiting indicator and `?` help.
 - **Remap or disable session navigation in `[keybindings]`.** Configure previous/next tab, previous/next session, and send-next-key in `config.toml`; `"none"` disables a shortcut. Help displays the configured keys, and tmux bindings are restored when Bosun exits.
 
 ### Changed
 
+- **tmux 3.2 or newer is required**, for `new-session -e`. bosun was already tested against 3.6 and 3.7.
 - **Focused navigation matches modifiers exactly.** Ctrl+Shift+arrows are no longer implicit aliases; configure them explicitly to use that combination while allowing Shift+arrows through to the application.
 
 ## [2.1.13] — 2026-09-13

@@ -2402,6 +2402,7 @@ impl App {
         terminal: &mut Terminal<B>,
     ) -> Result<()> {
         set_terminal_title("bosun");
+        crate::terminal_host::restore(terminal.backend_mut());
 
         // Initial refresh kick. Unbounded `send` is sync and can only
         // fail if the receiver has been dropped — meaning the tmux
@@ -3407,6 +3408,7 @@ impl App {
         &self,
         terminal: &mut Terminal<B>,
     ) {
+        crate::terminal_host::restore(terminal.backend_mut());
         let _ = execute!(
             terminal.backend_mut(),
             crossterm::terminal::EnterAlternateScreen,
@@ -3459,6 +3461,7 @@ impl App {
         //    bracketed paste regardless of attach result, then
         //    re-push the keyboard flags so modifier reporting is
         //    restored for the returning TUI.
+        crate::terminal_host::restore(terminal.backend_mut());
         crossterm::terminal::enable_raw_mode().map_err(BosunError::Io)?;
         execute!(
             terminal.backend_mut(),

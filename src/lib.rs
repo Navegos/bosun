@@ -7,6 +7,7 @@ pub mod events;
 pub mod keybindings;
 pub mod sidebar;
 pub mod store;
+mod terminal_host;
 pub mod terminal_query;
 pub mod tmux;
 pub mod ui;

@@ -10,6 +10,10 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **Start Claude sessions with Remote Control on.** The Claude options in the new-session dialog have a new **Remote Control** checkbox that launches with `--remote-control`, so the session is reachable from claude.ai/code and the mobile app without typing `/rc` after it starts. The remote session takes the same name as the bosun sidebar. Like the other options it's saved with the session and its recents entry, so restarts (including a resume with `r`) keep it, and `m` turns it on or off for an existing session's next restart.
 
+### Fixed
+
+- **Local image drops in iTerm2.** Bosun now reports its actual host on startup, after returning from a full tmux attach, and when restoring the display. Stale host information from an earlier shell could make iTerm2 offer to upload an image instead of inserting its local path.
+
 ## [2.1.14] — 2026-09-25
 
 ### Added

@@ -56,6 +56,7 @@ enum Field {
     // Claude-only
     ClaudeSession,
     ClaudeSkipPerm,
+    ClaudeRemoteControl,
     // Codex-only
     CodexSession,
     CodexYolo,
@@ -94,6 +95,7 @@ impl Field {
             "claude" => {
                 v.push(Field::ClaudeSession);
                 v.push(Field::ClaudeSkipPerm);
+                v.push(Field::ClaudeRemoteControl);
             }
             "codex" => {
                 v.push(Field::CodexSession);
@@ -554,7 +556,7 @@ impl NewSessionModal {
 
         // Agent-specific options.
         match self.agent() {
-            "claude" => h += 4,   // blank + header + radio + checkbox
+            "claude" => h += 5,   // blank + header + radio + 2 checkboxes
             "codex" => h += 4,    // blank + header + radio + checkbox
             "kimi" => h += 4,     // blank + header + radio + checkbox
             "opencode" => h += 4, // blank + header + radio + checkbox
@@ -883,6 +885,9 @@ impl Modal for NewSessionModal {
                     Field::ClaudeSkipPerm => {
                         self.claude.skip_permissions = !self.claude.skip_permissions;
                     }
+                    Field::ClaudeRemoteControl => {
+                        self.claude.remote_control = !self.claude.remote_control;
+                    }
                     Field::CodexYolo => {
                         self.codex.yolo = !self.codex.yolo;
                     }
@@ -1075,6 +1080,12 @@ impl Modal for NewSessionModal {
                     "Skip permissions (--dangerously-skip-permissions)",
                     self.claude.skip_permissions,
                     self.field == Field::ClaudeSkipPerm,
+                    theme,
+                ));
+                lines.push(checkbox_line(
+                    "Remote Control (--remote-control)",
+                    self.claude.remote_control,
+                    self.field == Field::ClaudeRemoteControl,
                     theme,
                 ));
             }
@@ -1879,6 +1890,8 @@ mod tests {
         assert_eq!(m.field, Field::ClaudeSession);
         m.handle(key(KeyCode::Tab));
         assert_eq!(m.field, Field::ClaudeSkipPerm);
+        m.handle(key(KeyCode::Tab));
+        assert_eq!(m.field, Field::ClaudeRemoteControl);
         // Wraps back to Name.
         m.handle(key(KeyCode::Tab));
         assert_eq!(m.field, Field::Name);
@@ -1905,18 +1918,50 @@ mod tests {
 
     #[test]
     fn modal_height_reserves_room_for_kimi_options() {
-        // Regression: kimi must reserve the same 4 option rows as claude
+        // Regression: kimi must reserve the same 4 option rows as codex
         // (blank + header + session radio + yolo checkbox), otherwise the
         // options render below the clipped modal height and vanish.
         let mut m = modal_for_field_tests();
-        m.agent_idx = AGENTS.iter().position(|a| *a == "claude").unwrap();
-        let claude_h = m.modal_height();
+        m.agent_idx = AGENTS.iter().position(|a| *a == "codex").unwrap();
+        let codex_h = m.modal_height();
         m.agent_idx = AGENTS.iter().position(|a| *a == "kimi").unwrap();
         let kimi_h = m.modal_height();
         m.agent_idx = AGENTS.iter().position(|a| *a == "terminal").unwrap();
         let terminal_h = m.modal_height();
-        assert_eq!(kimi_h, claude_h);
+        assert_eq!(kimi_h, codex_h);
         assert!(kimi_h > terminal_h);
+    }
+
+    #[test]
+    fn claude_remote_control_checkbox_renders_inside_the_modal() {
+        // Claude has a second checkbox, so it needs one more row than
+        // the other agents — without it the last option is clipped.
+        use ratatui::backend::TestBackend;
+        use ratatui::Terminal;
+
+        let mut m = modal_for_field_tests();
+        m.claude.remote_control = true;
+        let theme = crate::ui::Theme::default_opencode();
+        let (w, h) = (120u16, 40u16);
+        let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+        let area = ratatui::layout::Rect::new(0, 0, w, h);
+        terminal.draw(|f| m.render(f, area, &theme)).unwrap();
+
+        let rect = center_rect(area, MODAL_WIDTH, m.modal_height());
+        let buf = terminal.backend().buffer();
+        let rows: Vec<String> = (rect.top()..rect.bottom())
+            .map(|y| {
+                (rect.left()..rect.right())
+                    .map(|x| buf[(x, y)].symbol())
+                    .collect()
+            })
+            .collect();
+        assert!(
+            rows.iter()
+                .any(|r| r.contains("[x] Remote Control (--remote-control)")),
+            "remote control checkbox missing from the modal:\n{}",
+            rows.join("\n")
+        );
     }
 
     #[test]
@@ -2167,6 +2212,17 @@ mod tests {
     }
 
     #[test]
+    fn space_toggles_remote_control_when_focused() {
+        let mut m = NewSessionModal::new(Vec::new(), WorktreeLocation::default());
+        m.field = Field::ClaudeRemoteControl;
+        assert!(!m.claude.remote_control);
+        m.handle(key(KeyCode::Char(' ')));
+        assert!(m.claude.remote_control);
+        m.handle(key(KeyCode::Char(' ')));
+        assert!(!m.claude.remote_control);
+    }
+
+    #[test]
     fn left_right_cycles_claude_session_mode() {
         let mut m = NewSessionModal::new(Vec::new(), WorktreeLocation::default());
         m.field = Field::ClaudeSession;
@@ -2198,11 +2254,13 @@ mod tests {
             m.handle(key(KeyCode::Char(c)));
         }
         m.claude.skip_permissions = true;
+        m.claude.remote_control = true;
         m.claude.session_mode = ClaudeSessionMode::Continue;
         let r = m.handle(key(KeyCode::Enter));
         match r {
             ModalResult::Close(Some(Command::CreateSession(spec))) => {
                 assert!(spec.options.claude.skip_permissions);
+                assert!(spec.options.claude.remote_control);
                 assert_eq!(
                     spec.options.claude.session_mode,
                     ClaudeSessionMode::Continue

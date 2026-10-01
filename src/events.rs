@@ -63,6 +63,10 @@ pub struct SpecOptions {
 pub struct ClaudeOptions {
     pub session_mode: ClaudeSessionMode,
     pub skip_permissions: bool,
+    /// Claude `--remote-control` — start with Remote Control already
+    /// connected, so the session is reachable from claude.ai/code and
+    /// the mobile app without typing `/rc` after launch.
+    pub remote_control: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]

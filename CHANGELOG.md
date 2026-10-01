@@ -4,6 +4,12 @@ All notable changes to bosun are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project
 uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.15] — 2026-10-01
+
+### Added
+
+- **Start Claude sessions with Remote Control on.** The Claude options in the new-session dialog have a new **Remote Control** checkbox that launches with `--remote-control`, so the session is reachable from claude.ai/code and the mobile app without typing `/rc` after it starts. The remote session takes the same name as the bosun sidebar. Like the other options it's saved with the session and its recents entry, so restarts (including a resume with `r`) keep it, and `m` turns it on or off for an existing session's next restart.
+
 ## [2.1.14] — 2026-09-25
 
 ### Added

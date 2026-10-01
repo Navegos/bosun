@@ -86,6 +86,7 @@ impl Store {
                 args                     TEXT NOT NULL DEFAULT '',
                 claude_session_mode      TEXT NOT NULL DEFAULT 'New',
                 claude_skip_permissions  INTEGER NOT NULL DEFAULT 0,
+                claude_remote_control    INTEGER NOT NULL DEFAULT 0,
                 codex_yolo               INTEGER NOT NULL DEFAULT 0,
                 kimi_session_mode        TEXT NOT NULL DEFAULT 'New',
                 kimi_yolo                INTEGER NOT NULL DEFAULT 0,
@@ -118,6 +119,7 @@ impl Store {
             "ALTER TABLE recents ADD COLUMN opencode_auto INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE recents ADD COLUMN qwen_session_mode TEXT NOT NULL DEFAULT 'New'",
             "ALTER TABLE recents ADD COLUMN qwen_yolo INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE recents ADD COLUMN claude_remote_control INTEGER NOT NULL DEFAULT 0",
         ] {
             if let Err(e) = conn.execute(stmt, []) {
                 let msg = e.to_string();

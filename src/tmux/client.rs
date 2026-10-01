@@ -53,6 +53,7 @@ pub struct SessionMetadata {
     pub args: String,
     pub claude_session_mode: String,
     pub claude_skip_permissions: bool,
+    pub claude_remote_control: bool,
     pub codex_session_mode: String,
     pub codex_yolo: bool,
     pub kimi_session_mode: String,
@@ -513,7 +514,7 @@ impl TmuxClient for TokioTmuxClient {
         // `tmux::parse::LIST_SESSIONS_FORMAT`.
         const SEP: &str = "|||";
         let fmt = format!(
-            "#{{@bosun_display}}{SEP}#{{@bosun_path}}{SEP}#{{@bosun_agent}}{SEP}#{{@bosun_args}}{SEP}#{{@bosun_claude_session_mode}}{SEP}#{{@bosun_claude_skip_permissions}}{SEP}#{{@bosun_codex_yolo}}{SEP}#{{@bosun_container_id}}{SEP}#{{@bosun_worktree_path}}{SEP}#{{@bosun_branch}}{SEP}#{{@bosun_kimi_session_mode}}{SEP}#{{@bosun_kimi_yolo}}{SEP}#{{@bosun_codex_session_mode}}{SEP}#{{@bosun_opencode_session_mode}}{SEP}#{{@bosun_opencode_auto}}{SEP}#{{@bosun_qwen_session_mode}}{SEP}#{{@bosun_qwen_yolo}}",
+            "#{{@bosun_display}}{SEP}#{{@bosun_path}}{SEP}#{{@bosun_agent}}{SEP}#{{@bosun_args}}{SEP}#{{@bosun_claude_session_mode}}{SEP}#{{@bosun_claude_skip_permissions}}{SEP}#{{@bosun_codex_yolo}}{SEP}#{{@bosun_container_id}}{SEP}#{{@bosun_worktree_path}}{SEP}#{{@bosun_branch}}{SEP}#{{@bosun_kimi_session_mode}}{SEP}#{{@bosun_kimi_yolo}}{SEP}#{{@bosun_codex_session_mode}}{SEP}#{{@bosun_opencode_session_mode}}{SEP}#{{@bosun_opencode_auto}}{SEP}#{{@bosun_qwen_session_mode}}{SEP}#{{@bosun_qwen_yolo}}{SEP}#{{@bosun_claude_remote_control}}",
             SEP = SEP
         );
         let mut cmd = self.cmd();
@@ -927,6 +928,10 @@ fn metadata_options(m: &SessionMetadata) -> Vec<(&'static str, String)> {
             if m.claude_skip_permissions { "1" } else { "0" }.to_string(),
         ),
         (
+            "@bosun_claude_remote_control",
+            if m.claude_remote_control { "1" } else { "0" }.to_string(),
+        ),
+        (
             "@bosun_codex_yolo",
             if m.codex_yolo { "1" } else { "0" }.to_string(),
         ),
@@ -977,18 +982,20 @@ fn metadata_options(m: &SessionMetadata) -> Vec<(&'static str, String)> {
 /// `display | path | agent | args | claude_session_mode |
 /// claude_skip_permissions | codex_yolo | container_id | worktree_path |
 /// branch | kimi_session_mode | kimi_yolo | codex_session_mode |
-/// opencode_session_mode | opencode_auto | qwen_session_mode | qwen_yolo`.
+/// opencode_session_mode | opencode_auto | qwen_session_mode | qwen_yolo |
+/// claude_remote_control`.
 fn parse_metadata_line(line: &str, sep: &str) -> Option<SessionMetadata> {
     let parts: Vec<&str> = line.split(sep).collect();
     // Accept every historical field count: 7 (pre-container_id), 8
     // (container_id added), 9/10 (worktree_path + branch), 11/12
-    // (kimi_session_mode + kimi_yolo), and 13..=17 (codex_session_mode,
-    // opencode + qwen fields) — keeps sessions created by an older
-    // bosun usable after upgrade. Widening this matters: after
-    // appending fields to the read format, metadata-aware sessions
-    // emit the full count, so a narrower guard would reject every
-    // session and silently disable restart/modify.
-    if !matches!(parts.len(), 7..=17) {
+    // (kimi_session_mode + kimi_yolo), 13..=17 (codex_session_mode,
+    // opencode + qwen fields), and 18 (claude_remote_control) — keeps
+    // sessions created by an older bosun usable after upgrade.
+    // Widening this matters: after appending fields to the read
+    // format, metadata-aware sessions emit the full count, so a
+    // narrower guard would reject every session and silently disable
+    // restart/modify.
+    if !matches!(parts.len(), 7..=18) {
         return None;
     }
     // Agent is the required anchor — if it's empty, this session
@@ -1040,6 +1047,7 @@ fn parse_metadata_line(line: &str, sep: &str) -> Option<SessionMetadata> {
             _ => "New".to_string(),
         },
         qwen_yolo: parts.get(16) == Some(&"1"),
+        claude_remote_control: parts.get(17) == Some(&"1"),
     })
 }
 
@@ -1169,6 +1177,23 @@ mod tests {
         assert!(m.opencode_auto);
         assert_eq!(m.qwen_session_mode, "Resume");
         assert!(m.qwen_yolo);
+        // A session persisted before claude_remote_control existed
+        // has no 18th field — it defaults to off.
+        assert!(!m.claude_remote_control);
+    }
+
+    #[test]
+    fn parse_metadata_full_18_field_line_round_trips_remote_control() {
+        // The 17 fields above, then claude_remote_control.
+        let line = [
+            "Remote", "/tmp/r", "claude", "", "New", "0", "0", "", "", "", "New", "0", "New",
+            "New", "0", "New", "0", "1",
+        ]
+        .join(SEP);
+        let m = parse_metadata_line(&line, SEP).expect("18-field metadata parses");
+        assert_eq!(m.agent, "claude");
+        assert!(m.claude_remote_control);
+        assert!(!m.claude_skip_permissions);
     }
 
     #[test]

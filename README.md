@@ -116,7 +116,10 @@ you can click into and drive without leaving bosun.
   New/Continue/Resume session radio (Continue reopens the working
   directory's last session, Resume opens the agent's session picker
   where one exists) plus its auto-approve flag (Claude
-  skip-permissions, Codex/Kimi/Qwen `--yolo`, OpenCode `--auto`)
+  skip-permissions, Codex/Kimi/Qwen `--yolo`, OpenCode `--auto`).
+  Claude also has a Remote Control checkbox (`--remote-control`), so
+  the session is reachable from claude.ai/code and the mobile app
+  without typing `/rc` after it starts
 - Optional git worktree sessions — create a session in a fresh worktree
   on a new branch, then on kill choose to merge, remove, or keep it
 - Filesystem tab-completion in the path field (shell-style LCP matching

@@ -1129,6 +1129,17 @@ fn agent_binary<'a>(bins: &'a HashMap<String, String>, agent: &'a str) -> &'a st
         .unwrap_or(agent)
 }
 
+/// Whether the user's extra args already carry Claude's
+/// `--remote-control` flag (or its `--rc` alias), with or without a
+/// name attached.
+fn args_enable_remote_control(args: &str) -> bool {
+    args.split_whitespace().any(|t| {
+        matches!(t, "--remote-control" | "--rc")
+            || t.starts_with("--remote-control=")
+            || t.starts_with("--rc=")
+    })
+}
+
 fn build_agent_command(
     agent: &str,
     options: &SpecOptions,
@@ -1155,6 +1166,14 @@ fn build_agent_command(
             }
             if !args.is_empty() {
                 parts.push(args.to_string());
+            }
+            // `--remote-control` takes an optional name, so it goes last:
+            // anywhere earlier it would swallow a positional that follows
+            // it (the user's prompt in the extra args) as that name. The
+            // remote session is titled by `--name` above. Skipped when
+            // the extra args already turn it on.
+            if options.claude.remote_control && !args_enable_remote_control(args) {
+                parts.push("--remote-control".into());
             }
             parts.join(" ")
         }
@@ -1401,6 +1420,7 @@ fn spec_to_metadata(spec: &SessionSpec) -> SessionMetadata {
         args: spec.args.clone(),
         claude_session_mode: mode_to_str(spec.options.claude.session_mode),
         claude_skip_permissions: spec.options.claude.skip_permissions,
+        claude_remote_control: spec.options.claude.remote_control,
         codex_session_mode: mode_to_str(spec.options.codex.session_mode),
         codex_yolo: spec.options.codex.yolo,
         kimi_session_mode: mode_to_str(spec.options.kimi.session_mode),
@@ -1447,6 +1467,7 @@ fn metadata_to_spec(meta: SessionMetadata) -> SessionSpec {
             claude: ClaudeOptions {
                 session_mode: mode_from_str(&meta.claude_session_mode),
                 skip_permissions: meta.claude_skip_permissions,
+                remote_control: meta.claude_remote_control,
             },
             codex: CodexOptions {
                 session_mode: mode_from_str(&meta.codex_session_mode),
@@ -2029,6 +2050,7 @@ mod build_cmd_tests {
             claude: ClaudeOptions {
                 session_mode: ClaudeSessionMode::Resume,
                 skip_permissions: true,
+                ..Default::default()
             },
             codex: CodexOptions::default(),
             ..Default::default()
@@ -2069,6 +2091,7 @@ mod build_cmd_tests {
             claude: ClaudeOptions {
                 session_mode: ClaudeSessionMode::Continue,
                 skip_permissions: true,
+                ..Default::default()
             },
             ..Default::default()
         };
@@ -2086,6 +2109,84 @@ mod build_cmd_tests {
             build_agent_command("claude", &opts(), "--name custom", "My Session", &bins()),
             "claude --name custom"
         );
+    }
+
+    #[test]
+    fn claude_remote_control_goes_last() {
+        // After the extra args, so its optional name can't swallow a
+        // positional prompt that follows it.
+        let o = SpecOptions {
+            claude: ClaudeOptions {
+                skip_permissions: true,
+                remote_control: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert_eq!(
+            build_agent_command("claude", &o, "--model=opus", "Bosun Fix", &bins()),
+            "claude --dangerously-skip-permissions --name bosun-fix --model=opus --remote-control"
+        );
+        assert_eq!(
+            build_agent_command("claude", &o, "", "", &bins()),
+            "claude --dangerously-skip-permissions --remote-control"
+        );
+    }
+
+    #[test]
+    fn claude_remote_control_skipped_when_user_args_set_it() {
+        let mut o = opts();
+        o.claude.remote_control = true;
+        for args in [
+            "--remote-control",
+            "--rc",
+            "--remote-control phone",
+            "--remote-control=phone",
+        ] {
+            assert_eq!(
+                build_agent_command("claude", &o, args, "", &bins()),
+                format!("claude {args}")
+            );
+        }
+        // A longer flag that merely starts the same way isn't a match.
+        assert_eq!(
+            build_agent_command(
+                "claude",
+                &o,
+                "--remote-control-session-name-prefix box",
+                "",
+                &bins()
+            ),
+            "claude --remote-control-session-name-prefix box --remote-control"
+        );
+    }
+
+    #[test]
+    fn launch_resume_keeps_claude_remote_control() {
+        let mut o = opts();
+        o.claude.remote_control = true;
+        assert_eq!(
+            build_launch_command("claude", &o, "", "", true, &bins()),
+            "claude --continue --remote-control"
+        );
+    }
+
+    #[test]
+    fn claude_remote_control_round_trips_through_metadata() {
+        let mut spec = SessionSpec {
+            name: "rc".into(),
+            path: "/tmp".into(),
+            agent: "claude".into(),
+            args: String::new(),
+            options: opts(),
+            container_id: None,
+            resume: false,
+            worktree: None,
+        };
+        spec.options.claude.remote_control = true;
+        let meta = spec_to_metadata(&spec);
+        assert!(meta.claude_remote_control);
+        assert!(metadata_to_spec(meta).options.claude.remote_control);
     }
 
     #[test]
@@ -2351,6 +2452,7 @@ mod build_cmd_tests {
             claude: ClaudeOptions {
                 session_mode: ClaudeSessionMode::New,
                 skip_permissions: true,
+                ..Default::default()
             },
             ..Default::default()
         };

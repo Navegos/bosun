@@ -144,6 +144,7 @@ async fn metadata_round_trips_through_tmux_options() {
         args: "--model=opus".into(),
         claude_session_mode: "Resume".into(),
         claude_skip_permissions: true,
+        claude_remote_control: true,
         codex_yolo: false,
         kimi_session_mode: "New".into(),
         kimi_yolo: false,
@@ -179,6 +180,7 @@ async fn metadata_round_trips_through_tmux_options() {
     assert_eq!(got.args, "--model=opus");
     assert_eq!(got.claude_session_mode, "Resume");
     assert!(got.claude_skip_permissions);
+    assert!(got.claude_remote_control);
     assert!(!got.codex_yolo);
     // Worktree fields round-trip through the widened read format/guard.
     assert_eq!(got.worktree_path.as_deref(), Some("/tmp/.worktrees/feat"));

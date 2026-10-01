@@ -74,6 +74,7 @@ impl Store {
         let opencode_auto = spec.options.opencode.auto as i64;
         let qwen_mode = claude_mode_to_str(spec.options.qwen.session_mode);
         let qwen_yolo = spec.options.qwen.yolo as i64;
+        let remote_control = spec.options.claude.remote_control as i64;
 
         let conn = self.conn.lock().expect("store mutex poisoned");
         conn.execute(
@@ -85,9 +86,10 @@ impl Store {
                 codex_session_mode,
                 opencode_session_mode, opencode_auto,
                 qwen_session_mode, qwen_yolo,
+                claude_remote_control,
                 last_used_at, use_count
             )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, 1)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, 1)
             ON CONFLICT(name, path, agent) DO UPDATE SET
                 args                    = excluded.args,
                 claude_session_mode     = excluded.claude_session_mode,
@@ -100,6 +102,7 @@ impl Store {
                 opencode_auto           = excluded.opencode_auto,
                 qwen_session_mode       = excluded.qwen_session_mode,
                 qwen_yolo               = excluded.qwen_yolo,
+                claude_remote_control   = excluded.claude_remote_control,
                 last_used_at            = excluded.last_used_at,
                 use_count               = use_count + 1
             "#,
@@ -118,6 +121,7 @@ impl Store {
                 opencode_auto,
                 qwen_mode,
                 qwen_yolo,
+                remote_control,
                 now,
             ],
         )
@@ -138,6 +142,7 @@ impl Store {
                     codex_session_mode,
                     opencode_session_mode, opencode_auto,
                     qwen_session_mode, qwen_yolo,
+                    claude_remote_control,
                     last_used_at, use_count
                 FROM recents
                 ORDER BY last_used_at DESC
@@ -157,6 +162,7 @@ impl Store {
                 let opencode_auto: i64 = row.get(12)?;
                 let qwen_mode_str: String = row.get(13)?;
                 let qwen_yolo: i64 = row.get(14)?;
+                let remote_control: i64 = row.get(15)?;
                 Ok(Recent {
                     id: row.get(0)?,
                     name: row.get(1)?,
@@ -166,6 +172,7 @@ impl Store {
                     claude: ClaudeOptions {
                         session_mode: claude_mode_from_str(&session_mode_str),
                         skip_permissions: claude_skip != 0,
+                        remote_control: remote_control != 0,
                     },
                     codex: CodexOptions {
                         session_mode: claude_mode_from_str(&codex_mode_str),
@@ -183,8 +190,8 @@ impl Store {
                         session_mode: claude_mode_from_str(&qwen_mode_str),
                         yolo: qwen_yolo != 0,
                     },
-                    last_used_at: row.get(15)?,
-                    use_count: row.get(16)?,
+                    last_used_at: row.get(16)?,
+                    use_count: row.get(17)?,
                 })
             })
             .map_err(map_sql_err)?;
@@ -333,11 +340,18 @@ mod tests {
         let s = Store::in_memory().unwrap();
         let mut sp = spec("api", "/srv", "claude");
         sp.options.claude.skip_permissions = true;
+        sp.options.claude.remote_control = true;
         sp.options.claude.session_mode = ClaudeSessionMode::Resume;
         s.upsert_recent(&sp).unwrap();
         let got = &s.list_recents(1).unwrap()[0];
         assert!(got.claude.skip_permissions);
+        assert!(got.claude.remote_control);
         assert_eq!(got.claude.session_mode, ClaudeSessionMode::Resume);
+
+        // Re-creating the same recent with the box unticked clears it.
+        sp.options.claude.remote_control = false;
+        s.upsert_recent(&sp).unwrap();
+        assert!(!s.list_recents(1).unwrap()[0].claude.remote_control);
     }
 
     #[test]
@@ -435,6 +449,7 @@ mod tests {
             claude: ClaudeOptions {
                 session_mode: ClaudeSessionMode::Continue,
                 skip_permissions: true,
+                remote_control: true,
             },
             codex: CodexOptions::default(),
             kimi: KimiOptions::default(),
@@ -447,5 +462,6 @@ mod tests {
         assert_eq!(s.name, "x");
         assert_eq!(s.args, "--foo");
         assert!(s.options.claude.skip_permissions);
+        assert!(s.options.claude.remote_control);
     }
 }

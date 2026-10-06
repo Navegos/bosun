@@ -224,6 +224,10 @@ pub struct AppState {
     /// the tab strip and OSC title prefix grouped sessions with
     /// `group/`. Read by `ui::preview` and the attach-title path.
     pub show_group_in_title: bool,
+    /// Live copy of `Config::hide_single_tab_strip`: a single-tab row
+    /// draws no tab strip, and its name goes in the status bar instead.
+    /// Read through [`AppState::shows_tab_strip`].
+    pub hide_single_tab_strip: bool,
     /// Where `git worktree add` places new worktrees. Snapshot of
     /// `Config::worktree_location` at startup, passed into the
     /// new-session modal so its worktree preview line shows the same
@@ -477,6 +481,46 @@ impl AppState {
     /// The kind of entry under the cursor, if any.
     pub fn selected_kind(&self) -> Option<VisibleKind> {
         self.sidebar.visible().get(self.selected).map(|v| v.kind())
+    }
+
+    /// Whether the preview pane draws a tab strip for the row under the
+    /// cursor: it has to be a container, and with `hide_single_tab_strip`
+    /// on it also needs more than one tab. `App::tab_strip_height`, the
+    /// focus border and `ui::preview` all ask this, so the strip that is
+    /// drawn and the space the embed leaves for it always agree.
+    pub fn shows_tab_strip(&self) -> bool {
+        match self
+            .sidebar
+            .visible()
+            .get(self.selected)
+            .and_then(|e| e.container())
+        {
+            Some(c) => !self.hide_single_tab_strip || c.members.len() > 1,
+            None => false,
+        }
+    }
+
+    /// Name of the row under the cursor when it is a container whose tab
+    /// strip is hidden, for the status bar to show in the strip's place.
+    /// Prefixed `group/` like the strip's pills when `show_group_in_title`
+    /// is on and the row is in a section.
+    pub fn hidden_tab_title(&self) -> Option<String> {
+        if self.shows_tab_strip() {
+            return None;
+        }
+        let visible = self.sidebar.visible();
+        let entry = visible.get(self.selected)?;
+        let container = entry.container()?;
+        let display = match self.session_by_name(&container.active) {
+            Some(v) => v.display().to_string(),
+            None => self.dead_display_for(&container.active),
+        };
+        Some(match entry {
+            crate::sidebar::VisibleEntry::Member { section, .. } if self.show_group_in_title => {
+                format!("{}/{display}", section.name)
+            }
+            _ => display,
+        })
     }
 
     /// The internal session name under the cursor, if the cursor is
@@ -2359,6 +2403,7 @@ impl App {
             single_window_mode: config.single_window_mode,
             sidebar_hidden: config.sidebar_hidden,
             show_group_in_title: config.show_group_in_title,
+            hide_single_tab_strip: config.hide_single_tab_strip,
             worktree_location: config.worktree_location,
             default_agent: config.default_agent,
             remove_dead_sessions: config.remove_dead_sessions,
@@ -3120,6 +3165,7 @@ impl App {
                             "default_agent",
                             "remove_dead_sessions",
                             "show_group_in_title",
+                            "hide_single_tab_strip",
                             "embed_enabled",
                         ] {
                             if let Some(var) = crate::config::env_pin(key) {
@@ -3138,6 +3184,7 @@ impl App {
                             worktree_location: self.state.worktree_location,
                             single_window: self.state.single_window_mode,
                             show_group_in_title: self.state.show_group_in_title,
+                            hide_single_tab_strip: self.state.hide_single_tab_strip,
                             remove_dead_sessions: self.state.remove_dead_sessions,
                             embed_enabled: self.embed_enabled,
                         };
@@ -4011,6 +4058,13 @@ impl App {
                 self.state.show_group_in_title = on;
                 crate::config::write_show_group_in_title(on)
             }
+            S::HideSingleTabStrip(on) => {
+                // The embed picks up the new height on the next
+                // `sync_embed` pass, which resizes it when the preview
+                // dimensions change.
+                self.state.hide_single_tab_strip = on;
+                crate::config::write_hide_single_tab_strip(on)
+            }
             S::RemoveDeadSessions(on) => {
                 self.state.remove_dead_sessions = on;
                 crate::config::write_remove_dead_sessions(on)
@@ -4099,10 +4153,7 @@ impl App {
     /// outside the focus border, so it consumes one row from the
     /// preview rect before the focus-border inset math runs.
     fn tab_strip_height(&self) -> u16 {
-        match self.state.sidebar.visible().get(self.state.selected) {
-            Some(e) if e.container().is_some() => 1,
-            _ => 0,
-        }
+        u16::from(self.state.shows_tab_strip())
     }
 
     /// On-screen rectangle the tab strip occupies, or `None` when
@@ -5090,6 +5141,43 @@ mod tests {
             ungrouped: ungrouped.iter().map(|s| con(s)).collect(),
             sections,
         }
+    }
+
+    /// Issue #18: `hide_single_tab_strip` drops the strip only for a
+    /// container with one tab, and the status bar gets that tab's name.
+    #[test]
+    fn single_tab_rows_hide_the_strip_only_when_asked() {
+        let mut s = AppState::default();
+        s.sessions = vec![ses("solo"), ses("t1"), ses("t2"), ses("grouped")];
+        let mut pair = con("t1");
+        pair.members.push("t2".into());
+        s.sidebar = SidebarModel {
+            ungrouped: vec![con("solo"), pair],
+            sections: vec![section("g1", "proj", &["grouped"])],
+        };
+
+        // Off (the default): every container row keeps its strip.
+        s.selected = 0;
+        assert!(s.shows_tab_strip());
+        assert_eq!(s.hidden_tab_title(), None);
+
+        s.hide_single_tab_strip = true;
+        assert!(!s.shows_tab_strip(), "one tab: no strip");
+        assert_eq!(s.hidden_tab_title().as_deref(), Some("solo"));
+
+        s.selected = 1;
+        assert!(s.shows_tab_strip(), "two tabs keep the strip");
+        assert_eq!(s.hidden_tab_title(), None);
+
+        // A section header never had a strip, and has no tab name.
+        s.selected = 2;
+        assert!(!s.shows_tab_strip());
+        assert_eq!(s.hidden_tab_title(), None);
+
+        s.selected = 3;
+        assert_eq!(s.hidden_tab_title().as_deref(), Some("grouped"));
+        s.show_group_in_title = true;
+        assert_eq!(s.hidden_tab_title().as_deref(), Some("proj/grouped"));
     }
 
     /// Active tab names of the ungrouped containers — what most

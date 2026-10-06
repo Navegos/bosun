@@ -136,18 +136,11 @@ fn inset_one(area: Rect) -> Rect {
     Rect::new(area.x + 1, area.y + 1, area.width - 2, area.height - 2)
 }
 
-/// True when the cursor sits on a container (sidebar entry) — the
-/// preview pane carves a 1-row tab strip off the top in that case.
-/// Used by the focus-border code so the border doesn't overdraw
-/// the strip, and by `App::tab_strip_height` so the embed-area
-/// math stays in sync.
+/// True when the preview pane carves a 1-row tab strip off the top
+/// for the row under the cursor. Used by the focus-border code so the
+/// border doesn't overdraw the strip; see `AppState::shows_tab_strip`.
 fn has_tabstrip(state: &AppState) -> bool {
-    state
-        .sidebar
-        .visible()
-        .get(state.selected)
-        .map(|e| e.container().is_some())
-        .unwrap_or(false)
+    state.shows_tab_strip()
 }
 
 fn draw_focus_border(buf: &mut Buffer, area: Rect, fg: Color, bg: Color) {

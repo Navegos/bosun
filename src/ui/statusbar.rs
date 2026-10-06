@@ -1,7 +1,7 @@
 //! Bottom status bar. Shows key hints + any warning string from the app.
 
 use ratatui::layout::Rect;
-use ratatui::style::Style;
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use ratatui::Frame;
@@ -21,6 +21,21 @@ pub fn render(frame: &mut Frame<'_>, area: Rect, state: &AppState, theme: &Theme
             Style::default().fg(theme.text_muted).bg(bg),
         ),
     ];
+    // A single-tab row with its tab strip hidden (issue #18) still says
+    // which session it is, here instead of above the preview.
+    if let Some(title) = state.hidden_tab_title() {
+        left_spans.push(Span::styled(
+            title,
+            Style::default()
+                .fg(theme.text)
+                .bg(bg)
+                .add_modifier(Modifier::BOLD),
+        ));
+        left_spans.push(Span::styled(
+            " · ",
+            Style::default().fg(theme.text_muted).bg(bg),
+        ));
+    }
     left_spans.push(if state.send_next_key_pending {
         Span::styled(
             "Send next key to app…",

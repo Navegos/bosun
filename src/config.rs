@@ -264,6 +264,12 @@ pub struct Config {
     /// persistence. Default false. Set `show_group_in_title = true` in
     /// `config.toml` or `BOSUN_SHOW_GROUP_IN_TITLE=1|true|yes|on`.
     pub show_group_in_title: bool,
+    /// When true, the tab strip above the preview is only drawn for a
+    /// row with more than one tab, and a single tab's name moves to the
+    /// bottom status bar instead (issue #18). Default false. Set
+    /// `hide_single_tab_strip = true` in `config.toml` or
+    /// `BOSUN_HIDE_SINGLE_TAB_STRIP=1|true|yes|on`.
+    pub hide_single_tab_strip: bool,
     /// Where `git worktree add` places new worktrees. See `WorktreeLocation`.
     pub worktree_location: WorktreeLocation,
     /// Agent preselected by the new-session form. Invalid or missing
@@ -311,6 +317,7 @@ impl Default for Config {
             single_window_mode: true,
             sidebar_hidden: false,
             show_group_in_title: DEFAULT_SHOW_GROUP_IN_TITLE,
+            hide_single_tab_strip: DEFAULT_HIDE_SINGLE_TAB_STRIP,
             worktree_location: WorktreeLocation::default(),
             default_agent: DEFAULT_AGENT.to_string(),
             remove_dead_sessions: DEFAULT_REMOVE_DEAD_SESSIONS,
@@ -339,6 +346,10 @@ pub const DEFAULT_EMBED_ENABLED: bool = true;
 /// tab pills and OSC title look unchanged for existing users until they
 /// opt in via `show_group_in_title = true` or `BOSUN_SHOW_GROUP_IN_TITLE=1`.
 pub const DEFAULT_SHOW_GROUP_IN_TITLE: bool = false;
+
+/// Default for `Config::hide_single_tab_strip`. Off, so every row keeps
+/// its tab strip until the user opts in.
+pub const DEFAULT_HIDE_SINGLE_TAB_STRIP: bool = false;
 
 /// Shape of `config.toml` on disk. All fields are optional and
 /// defaulted independently so a half-written file still loads.
@@ -397,6 +408,10 @@ struct ConfigFile {
     /// Group-in-title opt-in. See `Config::show_group_in_title`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     show_group_in_title: Option<bool>,
+    /// Hide the tab strip on single-tab rows. See
+    /// `Config::hide_single_tab_strip`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    hide_single_tab_strip: Option<bool>,
     /// Worktree placement scheme. See `Config::worktree_location`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     worktree_location: Option<WorktreeLocation>,
@@ -548,6 +563,18 @@ impl Config {
                 .unwrap_or(DEFAULT_SHOW_GROUP_IN_TITLE),
         };
 
+        // Same idiom as BOSUN_SHOW_GROUP_IN_TITLE: off by default, so an
+        // empty value leaves it off.
+        let hide_single_tab_strip = match env::var("BOSUN_HIDE_SINGLE_TAB_STRIP") {
+            Ok(s) => !matches!(
+                s.trim().to_ascii_lowercase().as_str(),
+                "" | "0" | "false" | "off" | "no"
+            ),
+            Err(_) => file
+                .hide_single_tab_strip
+                .unwrap_or(DEFAULT_HIDE_SINGLE_TAB_STRIP),
+        };
+
         let worktree_location = file.worktree_location.unwrap_or_default();
 
         // Env beats file for these two, like the flags above. Bosun
@@ -600,6 +627,7 @@ impl Config {
             single_window_mode,
             sidebar_hidden,
             show_group_in_title,
+            hide_single_tab_strip,
             worktree_location,
             default_agent,
             remove_dead_sessions,
@@ -710,6 +738,7 @@ pub fn env_pin(setting: &str) -> Option<&'static str> {
         "default_agent" => "BOSUN_DEFAULT_AGENT",
         "remove_dead_sessions" => "BOSUN_REMOVE_DEAD_SESSIONS",
         "show_group_in_title" => "BOSUN_SHOW_GROUP_IN_TITLE",
+        "hide_single_tab_strip" => "BOSUN_HIDE_SINGLE_TAB_STRIP",
         "embed_enabled" => "BOSUN_EMBED",
         _ => return None,
     };
@@ -758,6 +787,11 @@ pub fn write_remove_dead_sessions(on: bool) -> std::io::Result<()> {
 /// and the terminal title.
 pub fn write_show_group_in_title(on: bool) -> std::io::Result<()> {
     update_config_file(|f| f.show_group_in_title = Some(on))
+}
+
+/// Persist whether single-tab rows hide their tab strip.
+pub fn write_hide_single_tab_strip(on: bool) -> std::io::Result<()> {
+    update_config_file(|f| f.hide_single_tab_strip = Some(on))
 }
 
 /// Persist where `git worktree add` places new worktrees.
@@ -1029,6 +1063,7 @@ mod tests {
             single_window_mode: false,
             sidebar_hidden: false,
             show_group_in_title: DEFAULT_SHOW_GROUP_IN_TITLE,
+            hide_single_tab_strip: DEFAULT_HIDE_SINGLE_TAB_STRIP,
             worktree_location: WorktreeLocation::default(),
             default_agent: DEFAULT_AGENT.to_string(),
             remove_dead_sessions: DEFAULT_REMOVE_DEAD_SESSIONS,
@@ -1079,6 +1114,7 @@ mod tests {
             single_window_mode: false,
             sidebar_hidden: false,
             show_group_in_title: DEFAULT_SHOW_GROUP_IN_TITLE,
+            hide_single_tab_strip: DEFAULT_HIDE_SINGLE_TAB_STRIP,
             worktree_location: WorktreeLocation::default(),
             default_agent: DEFAULT_AGENT.to_string(),
             remove_dead_sessions: DEFAULT_REMOVE_DEAD_SESSIONS,
@@ -1142,6 +1178,11 @@ mod tests {
     #[test]
     fn show_group_in_title_defaults_off() {
         assert!(!Config::default().show_group_in_title);
+    }
+
+    #[test]
+    fn hide_single_tab_strip_defaults_off() {
+        assert!(!Config::default().hide_single_tab_strip);
     }
 
     #[test]

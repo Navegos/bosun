@@ -59,7 +59,7 @@ pub fn render(
     // inset) operates on the *remaining* rect.
     let mut working_area = area;
     if let Some(entry) = state.sidebar.visible().get(state.selected) {
-        if let Some(container) = entry.container() {
+        if let Some(container) = entry.container().filter(|_| state.shows_tab_strip()) {
             if area.height > 0 && area.width > 0 {
                 let strip_area = Rect::new(area.x, area.y, area.width, 1);
                 // Resolve each tab's display name here: a live tab uses

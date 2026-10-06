@@ -154,6 +154,7 @@ pub enum SettingChange {
     WorktreeLocation(crate::config::WorktreeLocation),
     SingleWindow(bool),
     ShowGroupInTitle(bool),
+    HideSingleTabStrip(bool),
     RemoveDeadSessions(bool),
     EmbedEnabled(bool),
 }

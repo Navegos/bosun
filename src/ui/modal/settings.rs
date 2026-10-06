@@ -36,6 +36,7 @@ pub enum Row {
     WorktreeLocation,
     SingleWindow,
     ShowGroupInTitle,
+    HideSingleTabStrip,
     RemoveDeadSessions,
     EmbedEnabled,
 }
@@ -48,6 +49,7 @@ impl Row {
         Row::WorktreeLocation,
         Row::SingleWindow,
         Row::ShowGroupInTitle,
+        Row::HideSingleTabStrip,
         Row::RemoveDeadSessions,
         Row::EmbedEnabled,
     ];
@@ -60,6 +62,7 @@ impl Row {
             Row::WorktreeLocation => "worktree location",
             Row::SingleWindow => "single-window mode",
             Row::ShowGroupInTitle => "group in tab title",
+            Row::HideSingleTabStrip => "hide strip for one tab",
             Row::RemoveDeadSessions => "remove exited sessions",
             Row::EmbedEnabled => "live preview",
         }
@@ -76,6 +79,7 @@ impl Row {
             Row::DefaultAgent => Some("default_agent"),
             Row::RemoveDeadSessions => Some("remove_dead_sessions"),
             Row::ShowGroupInTitle => Some("show_group_in_title"),
+            Row::HideSingleTabStrip => Some("hide_single_tab_strip"),
             Row::EmbedEnabled => Some("embed_enabled"),
             Row::BannerFont | Row::WorktreeLocation | Row::SingleWindow => None,
         }
@@ -89,6 +93,7 @@ impl Row {
             Row::WorktreeLocation => "where git worktree add puts new worktrees",
             Row::SingleWindow => "attach inside bosun instead of handing over the terminal",
             Row::ShowGroupInTitle => "prefix grouped sessions as group/session",
+            Row::HideSingleTabStrip => "tab strip only for 2+ tabs; name moves to status bar",
             Row::RemoveDeadSessions => "drop a session's row when its tmux session ends",
             Row::EmbedEnabled => "live terminal in the preview pane, not polled snapshots",
         }
@@ -111,6 +116,7 @@ pub struct SettingsValues {
     pub worktree_location: WorktreeLocation,
     pub single_window: bool,
     pub show_group_in_title: bool,
+    pub hide_single_tab_strip: bool,
     pub remove_dead_sessions: bool,
     pub embed_enabled: bool,
 }
@@ -150,6 +156,7 @@ impl SettingsModal {
             },
             Row::SingleWindow => on_off(self.values.single_window),
             Row::ShowGroupInTitle => on_off(self.values.show_group_in_title),
+            Row::HideSingleTabStrip => on_off(self.values.hide_single_tab_strip),
             Row::RemoveDeadSessions => on_off(self.values.remove_dead_sessions),
             Row::EmbedEnabled => on_off(self.values.embed_enabled),
         }
@@ -201,6 +208,10 @@ impl SettingsModal {
             Row::ShowGroupInTitle => {
                 self.values.show_group_in_title = !self.values.show_group_in_title;
                 SettingChange::ShowGroupInTitle(self.values.show_group_in_title)
+            }
+            Row::HideSingleTabStrip => {
+                self.values.hide_single_tab_strip = !self.values.hide_single_tab_strip;
+                SettingChange::HideSingleTabStrip(self.values.hide_single_tab_strip)
             }
             Row::RemoveDeadSessions => {
                 self.values.remove_dead_sessions = !self.values.remove_dead_sessions;
@@ -392,6 +403,7 @@ mod tests {
             worktree_location: WorktreeLocation::default(),
             single_window: true,
             show_group_in_title: false,
+            hide_single_tab_strip: false,
             remove_dead_sessions: false,
             embed_enabled: true,
         }
@@ -421,6 +433,20 @@ mod tests {
             change(&mut m, KeyCode::Right),
             Some(SettingChange::RemoveDeadSessions(false))
         );
+    }
+
+    #[test]
+    fn hide_single_tab_strip_row_toggles() {
+        let mut m = SettingsModal::new(values());
+        m.selected = Row::ALL
+            .iter()
+            .position(|r| *r == Row::HideSingleTabStrip)
+            .unwrap();
+        assert_eq!(
+            change(&mut m, KeyCode::Right),
+            Some(SettingChange::HideSingleTabStrip(true))
+        );
+        assert_eq!(m.value_of(Row::HideSingleTabStrip), "on");
     }
 
     #[test]

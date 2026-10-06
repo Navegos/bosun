@@ -546,6 +546,8 @@ max_fps          = 60           # ceiling on repaints per second; 0 turns pacing
 single_window    = true         # `s` key persists this; Enter focuses in-place instead of full-screen attach
 embed_enabled    = true         # set false to fall back to the polled-snapshot preview
 show_group_in_title = false      # prefix grouped sessions as "group/session" in tab pills and terminal title
+hide_single_tab_strip = false    # true draws the tab strip only for rows with 2+ tabs; a single tab's
+                                # name moves to the status bar. Ctrl+T still adds a tab.
 editor           = "zed"        # set via `bosun editor <cmd>`; used by the `E` key
 banner_font      = "newsx"      # section banner font; cycled with `f` on a header
 default_agent    = "opencode"   # agent preselected for new sessions; defaults to "claude"
@@ -598,6 +600,7 @@ Environment overrides:
 | `BOSUN_SINGLE_WINDOW` | `single_window` (`1` / `true` to enable) |
 | `BOSUN_EMBED` | `embed_enabled` (`0` / `false` to disable) |
 | `BOSUN_SHOW_GROUP_IN_TITLE` | `show_group_in_title` (`1` / `true` / `yes` / `on` to enable) |
+| `BOSUN_HIDE_SINGLE_TAB_STRIP` | `hide_single_tab_strip` (`1` / `true` / `yes` / `on` to enable) |
 | `BOSUN_DEFAULT_AGENT` | `default_agent` |
 | `BOSUN_REMOVE_DEAD_SESSIONS` | `remove_dead_sessions` (`0` / `false` / `off` / `no` to disable) |
 | `BOSUN_LOG` | Tracing filter, e.g. `BOSUN_LOG=info` |

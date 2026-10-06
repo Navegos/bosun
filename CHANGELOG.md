@@ -4,6 +4,12 @@ All notable changes to bosun are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); the project
 uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.16] — 2026-10-05
+
+### Added
+
+- **Hide the tab strip on single-tab rows** ([#18](https://github.com/yetidevworks/bosun/issues/18)). Turn on **hide strip for one tab** in the settings panel (`s`), or set `hide_single_tab_strip = true` in `config.toml` / `BOSUN_HIDE_SINGLE_TAB_STRIP=1`, and the strip above the preview only appears for a row with more than one tab, giving that row back to the session. The session's name moves to the bottom status bar so you can still tell which one is showing. `Ctrl+T` still adds a tab, and the strip comes back as soon as there are two.
+
 ## [2.1.15] — 2026-10-01
 
 ### Added

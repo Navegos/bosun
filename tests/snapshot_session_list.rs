@@ -189,3 +189,55 @@ fn sections_group_sessions() {
     let frame = render(&state, 80, 12);
     insta::assert_snapshot!("sections_group_sessions", frame);
 }
+
+/// Issue #18: with `hide_single_tab_strip` on, a single-tab row draws
+/// no tab strip above the preview and its name moves to the status bar.
+/// A row with two tabs keeps its strip either way.
+#[test]
+fn single_tab_strip_hides_only_when_asked() {
+    let mut state = state_with(vec![
+        ses("solo", false),
+        ses("pair-one", false),
+        ses("pair-two", false),
+    ]);
+    // Fold the last two sessions into one two-tab container.
+    let mut pair = state.sidebar.ungrouped.remove(1);
+    pair.members.push(state.sidebar.ungrouped.remove(1).active);
+    state.sidebar.ungrouped.push(pair);
+
+    let preview_top = |frame: &str| {
+        frame
+            .lines()
+            .next()
+            .unwrap()
+            .chars()
+            .skip(40)
+            .collect::<String>()
+    };
+    let status_bar = |frame: &str| frame.lines().last().unwrap().to_string();
+
+    // Off (the default): the single tab still has its strip.
+    let frame = render(&state, 100, 12);
+    assert!(
+        preview_top(&frame).contains("solo"),
+        "strip missing:\n{frame}"
+    );
+    assert!(!status_bar(&frame).contains("solo"), "{frame}");
+
+    state.hide_single_tab_strip = true;
+    let frame = render(&state, 100, 12);
+    assert!(
+        !preview_top(&frame).contains("solo"),
+        "strip still drawn:\n{frame}"
+    );
+    assert!(status_bar(&frame).contains("solo · 3 sessions"), "{frame}");
+
+    // The two-tab row keeps its strip and leaves the status bar alone.
+    state.selected = 1;
+    let frame = render(&state, 100, 12);
+    assert!(
+        preview_top(&frame).contains("pair-one"),
+        "strip missing:\n{frame}"
+    );
+    assert!(!status_bar(&frame).contains("pair-one"), "{frame}");
+}
